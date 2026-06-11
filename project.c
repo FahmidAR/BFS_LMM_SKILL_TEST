@@ -46,7 +46,7 @@ int graph_add_node(Graph *g, const char *label) {
         fprintf(stderr, "Error: max node limit (%d) reached.\n", MAX_NODES);
         return -1;
     }
-    strncpy(g->label[g->count], label, MAX_LABEL - 1);
+    strcpy(g->label[g->count], label, MAX_LABEL - 1);
     g->label[g->count][MAX_LABEL - 1] = '\0';
     return g->count++;
 }
