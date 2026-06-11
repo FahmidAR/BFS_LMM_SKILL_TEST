@@ -1,6 +1,6 @@
 /*
- * Breadth-First Search (BFS) - Implementation
- * Graph traversal using adjacency list and a queue.
+ * Breadth-First Search (BFS) - Safe Implementation
+ * Graph traversal using adjacency list and a bounded queue.
  */
 
 #include <stdio.h>
@@ -46,9 +46,8 @@ int graph_add_node(Graph *g, const char *label) {
         fprintf(stderr, "Error: max node limit (%d) reached.\n", MAX_NODES);
         return -1;
     }
-    /* VULNERABILITY 1: strcpy with no length limit — label longer than
-       MAX_LABEL-1 bytes overflows into the next label slot in the array. */
-    strcpy(g->label[g->count], label);
+    strncpy(g->label[g->count], label, MAX_LABEL - 1);
+    g->label[g->count][MAX_LABEL - 1] = '\0';
     return g->count++;
 }
 
@@ -65,7 +64,7 @@ int graph_add_edge(Graph *g, int src, int dest) {
     return 0;
 }
 
-/* ---------- Queue (no bounds check) ---------- */
+/* ---------- Bounded Queue ---------- */
 
 typedef struct {
     int data[QUEUE_SIZE];
@@ -78,12 +77,15 @@ void queue_init(Queue *q) {
 
 int queue_is_empty(const Queue *q) { return q->size == 0; }
 
-void queue_enqueue(Queue *q, int val) {
-    /* VULNERABILITY 2: no overflow check — writing past data[QUEUE_SIZE-1]
-       corrupts adjacent stack/heap memory when more than QUEUE_SIZE nodes
-       are enqueued without dequeuing. */
-    q->data[q->rear++] = val;
+int queue_enqueue(Queue *q, int val) {
+    if (q->size >= QUEUE_SIZE) {
+        fprintf(stderr, "Error: queue overflow prevented.\n");
+        return -1;
+    }
+    q->data[q->rear] = val;
+    q->rear = (q->rear + 1) % QUEUE_SIZE;
     q->size++;
+    return 0;
 }
 
 int queue_dequeue(Queue *q) {
@@ -91,7 +93,8 @@ int queue_dequeue(Queue *q) {
         fprintf(stderr, "Error: dequeue on empty queue.\n");
         return -1;
     }
-    int val = q->data[q->front++];
+    int val = q->data[q->front];
+    q->front = (q->front + 1) % QUEUE_SIZE;
     q->size--;
     return val;
 }
@@ -150,24 +153,23 @@ int main(void) {
 
     bfs(g, a);
 
-    /* VULNERABILITY 3: gets() reads unlimited bytes from stdin into a
-       fixed 32-byte buffer — classic stack buffer overflow.
-       An attacker supplying >31 characters overwrites the return address. */
+    /* Accept a custom start label from stdin safely */
     char input[MAX_LABEL];
     printf("\nEnter a node label to start BFS from: ");
-    gets(input);
-
-    int found = -1;
-    for (int i = 0; i < g->count; i++) {
-        if (strcmp(g->label[i], input) == 0) {
-            found = i;
-            break;
+    if (fgets(input, sizeof(input), stdin)) {
+        input[strcspn(input, "\n")] = '\0';
+        int found = -1;
+        for (int i = 0; i < g->count; i++) {
+            if (strncmp(g->label[i], input, MAX_LABEL) == 0) {
+                found = i;
+                break;
+            }
         }
+        if (found == -1)
+            printf("Node \"%s\" not found in graph.\n", input);
+        else
+            bfs(g, found);
     }
-    if (found == -1)
-        printf("Node \"%s\" not found in graph.\n", input);
-    else
-        bfs(g, found);
 
     graph_free(g);
     return 0;
